@@ -1,4 +1,7 @@
 # About
+This is a custom fork to fix one thing for one specific server. please do not use this.
+
+
 TAB aims to be a superior all-in-one minecraft plugin for displaying information that outperforms all 
 similar plugins in terms of features, performance and compatibility.  
 More information can be found at [Why TAB?](https://github.com/NEZNAMY/TAB/wiki/Why-TAB%3F) wiki page.
