@@ -9,7 +9,6 @@ import me.neznamy.tab.shared.chat.*;
 import me.neznamy.tab.shared.features.injection.PipelineInjector;
 import me.neznamy.tab.shared.features.redis.RedisSupport;
 import me.neznamy.tab.shared.hook.PremiumVanishHook;
-import me.neznamy.tab.shared.hook.ViaVersionHook;
 import me.neznamy.tab.shared.proxy.ProxyPlatform;
 import me.neznamy.tab.shared.util.ReflectionUtils;
 import net.md_5.bungee.api.ChatColor;
@@ -26,7 +25,6 @@ import org.jetbrains.annotations.Nullable;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * BungeeCord implementation of Platform
@@ -52,7 +50,6 @@ public class BungeePlatform extends ProxyPlatform {
     @SuppressWarnings("deprecation")
     @Override
     public void loadPlayers() {
-        ViaVersionHook.getInstance().printProxyWarn();
         try {
             ProxyConfig config = ProxyServer.getInstance().getConfig();
             if ((boolean) config.getClass().getMethod("isDisableTabListRewrite").invoke(config)) {
@@ -136,7 +133,7 @@ public class BungeePlatform extends ProxyPlatform {
             if (modern) {
                 textComponent.setColor(ChatColor.of("#" + modifier.getColor().getHexCode()));
             } else {
-                textComponent.setColor(ChatColor.of(modifier.getColor().getLegacyColor().name().toLowerCase(Locale.US)));
+                textComponent.setColor(ChatColor.of(modifier.getColor().getLegacyColor().name()));
             }
         }
 

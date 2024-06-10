@@ -1,15 +1,10 @@
 package me.neznamy.tab.platforms.fabric;
 
 import lombok.NonNull;
-import lombok.SneakyThrows;
 import me.neznamy.tab.shared.TAB;
-import me.neznamy.tab.shared.TabConstants;
 import me.neznamy.tab.shared.chat.EnumChatFormat;
 import me.neznamy.tab.shared.chat.TabComponent;
-import me.neznamy.tab.shared.features.sorting.Sorting;
 import me.neznamy.tab.shared.platform.Scoreboard;
-import me.neznamy.tab.shared.platform.TabPlayer;
-import me.neznamy.tab.shared.util.ReflectionUtils;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
@@ -21,8 +16,6 @@ import net.minecraft.world.scores.Team;
 import net.minecraft.world.scores.criteria.ObjectiveCriteria.RenderType;
 import org.jetbrains.annotations.Nullable;
 
-import java.lang.reflect.Field;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -30,7 +23,7 @@ import java.util.Map;
 /**
  * Scoreboard implementation for Fabric using packets.
  */
-public class FabricScoreboard extends Scoreboard<FabricTabPlayer> {
+public class FabricScoreboard extends Scoreboard<FabricTabPlayer, Component> {
 
     private static final net.minecraft.world.scores.Scoreboard dummyScoreboard = new net.minecraft.world.scores.Scoreboard();
 
@@ -53,12 +46,12 @@ public class FabricScoreboard extends Scoreboard<FabricTabPlayer> {
 
     @Override
     public void registerObjective0(@NonNull String objectiveName, @NonNull String title, int display,
-                                   @Nullable TabComponent numberFormat) {
+                                   @Nullable Component numberFormat) {
         Objective obj = FabricMultiVersion.newObjective(
                 objectiveName,
                 toComponent(title),
                 RenderType.values()[display],
-                numberFormat == null ? null : numberFormat.convert(player.getVersion())
+                numberFormat
         );
         objectives.put(objectiveName, obj);
         player.sendPacket(new ClientboundSetObjectivePacket(obj, ObjectiveAction.REGISTER));
@@ -71,7 +64,7 @@ public class FabricScoreboard extends Scoreboard<FabricTabPlayer> {
 
     @Override
     public void updateObjective0(@NonNull String objectiveName, @NonNull String title, int display,
-                                 @Nullable TabComponent numberFormat) {
+                                 @Nullable Component numberFormat) {
         Objective obj = objectives.get(objectiveName);
         obj.setDisplayName(toComponent(title));
         obj.setRenderType(RenderType.values()[display]);
@@ -116,14 +109,8 @@ public class FabricScoreboard extends Scoreboard<FabricTabPlayer> {
 
     @Override
     public void setScore0(@NonNull String objective, @NonNull String scoreHolder, int score,
-                          @Nullable TabComponent displayName, @Nullable TabComponent numberFormat) {
-        player.sendPacket(FabricMultiVersion.setScore(
-                objective,
-                scoreHolder,
-                score,
-                displayName == null ? null : displayName.convert(player.getVersion()),
-                numberFormat == null ? null : numberFormat.convert(player.getVersion())
-        ));
+                          @Nullable Component displayName, @Nullable Component numberFormat) {
+        player.sendPacket(FabricMultiVersion.setScore(objective, scoreHolder, score, displayName, numberFormat));
     }
 
     @Override
@@ -131,9 +118,7 @@ public class FabricScoreboard extends Scoreboard<FabricTabPlayer> {
         player.sendPacket(FabricMultiVersion.removeScore(objective, scoreHolder));
     }
 
-    @SuppressWarnings("unchecked")
     @Override
-    @SneakyThrows
     public void onPacketSend(@NonNull Object packet) {
         if (packet instanceof ClientboundSetDisplayObjectivePacket display) {
             TAB.getInstance().getFeatureManager().onDisplayObjective(player, FabricMultiVersion.getDisplaySlot(display), display.objectiveName);
@@ -141,36 +126,8 @@ public class FabricScoreboard extends Scoreboard<FabricTabPlayer> {
         if (packet instanceof ClientboundSetObjectivePacket objective) {
             TAB.getInstance().getFeatureManager().onObjective(player, objective.method, objective.objectiveName);
         }
-        if (isAntiOverrideTeams() && FabricMultiVersion.isTeamPacket((Packet<?>) packet)) {
-            if (TAB.getInstance().getNameTagManager() == null) return;
-            int action = ReflectionUtils.getInstanceFields(packet.getClass(), int.class).get(0).getInt(packet);
-            if (action == 1 || action == 2 || action == 4) return;
-            Field playersField = ReflectionUtils.getFields(packet.getClass(), Collection.class).get(0);
-            Collection<String> players = (Collection<String>) playersField.get(packet);
-            String teamName = String.valueOf(ReflectionUtils.getFields(packet.getClass(), String.class).get(0).get(packet));
-            if (players == null) return;
-            //creating a new list to prevent NoSuchFieldException in minecraft packet encoder when a player is removed
-            Collection<String> newList = new ArrayList<>();
-            for (String entry : players) {
-                TabPlayer p = getPlayer(entry);
-                if (p == null) {
-                    newList.add(entry);
-                    continue;
-                }
-                Sorting sorting = TAB.getInstance().getFeatureManager().getFeature(TabConstants.Feature.SORTING);
-                String expectedTeam = sorting.getShortTeamName(p);
-                if (expectedTeam == null) {
-                    newList.add(entry);
-                    continue;
-                }
-                if (!TAB.getInstance().getNameTagManager().getDisableChecker().isDisabledPlayer(p) &&
-                        !TAB.getInstance().getNameTagManager().hasTeamHandlingPaused(p) && !teamName.equals(expectedTeam)) {
-                    logTeamOverride(teamName, p.getName(), expectedTeam);
-                } else {
-                    newList.add(entry);
-                }
-            }
-            playersField.set(packet, newList);
+        if (isAntiOverrideTeams()) {
+            FabricMultiVersion.checkTeamPacket((Packet<?>) packet, this);
         }
     }
 

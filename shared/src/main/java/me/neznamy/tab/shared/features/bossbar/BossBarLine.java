@@ -175,6 +175,36 @@ public class BossBarLine implements BossBar {
         }
     }
 
+    /**
+     * Resends bossbar to the player.
+     *
+     * @param   player
+     *          Player to resend bossbar to
+     */
+    public void sendToPlayerRaw(@NotNull TabPlayer player) {
+        player.getBossBar().create(
+                uniqueId,
+                player.getProperty(propertyTitle).updateAndGet(),
+                parseProgress(player, player.getProperty(propertyProgress).updateAndGet())/100,
+                parseColor(player.getProperty(propertyColor).updateAndGet()),
+                parseStyle(player.getProperty(propertyStyle).updateAndGet())
+        );
+    }
+
+    /**
+     * Removes player from set of players.
+     *
+     * @param   player
+     *          Player to remove
+     */
+    public void removePlayerRaw(@NotNull TabPlayer player) {
+        players.remove(player);
+    }
+
+    // ------------------
+    // API Implementation
+    // ------------------
+
     @Override
     public void setTitle(@NonNull String title) {
         if (this.title.equals(title)) return;
@@ -234,28 +264,12 @@ public class BossBarLine implements BossBar {
     public void addPlayer(@NonNull me.neznamy.tab.api.TabPlayer p) {
         TabPlayer player = (TabPlayer) p;
         if (players.contains(player)) return;
-        players.add(player);
         player.setProperty(textRefresher, propertyTitle, title);
         player.setProperty(progressRefresher, propertyProgress, progress);
         player.setProperty(colorRefresher, propertyColor, color);
         player.setProperty(styleRefresher, propertyStyle, style);
         sendToPlayerRaw(player);
-    }
-
-    /**
-     * Resends bossbar to the player.
-     *
-     * @param   player
-     *          Player to resend bossbar to
-     */
-    public void sendToPlayerRaw(@NotNull TabPlayer player) {
-        player.getBossBar().create(
-                uniqueId,
-                player.getProperty(propertyTitle).updateAndGet(),
-                parseProgress(player, player.getProperty(propertyProgress).updateAndGet())/100,
-                parseColor(player.getProperty(propertyColor).updateAndGet()),
-                parseStyle(player.getProperty(propertyStyle).updateAndGet())
-        );
+        players.add(player);
     }
 
     @Override
@@ -266,16 +280,6 @@ public class BossBarLine implements BossBar {
         player.getBossBar().remove(uniqueId);
     }
 
-    /**
-     * Removes player from set of players.
-     *
-     * @param   player
-     *          Player to remove
-     */
-    public void removePlayerRaw(@NotNull TabPlayer player) {
-        players.remove(player);
-    }
-
     @Override
     @NotNull
     public List<me.neznamy.tab.api.TabPlayer> getPlayers() {
@@ -283,7 +287,7 @@ public class BossBarLine implements BossBar {
     }
 
     @Override
-    public boolean containsPlayer(me.neznamy.tab.api.TabPlayer player) {
+    public boolean containsPlayer(@NonNull me.neznamy.tab.api.TabPlayer player) {
         return players.contains((TabPlayer) player);
     }
 

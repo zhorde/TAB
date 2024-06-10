@@ -51,6 +51,8 @@ public class PacketTabList1193 extends PacketTabList18 {
      *          If something goes wrong
      */
     public static void loadNew() throws ReflectiveOperationException {
+        Class<?> IChatBaseComponent = BukkitReflection.getClass("network.chat.Component", "network.chat.IChatBaseComponent", "IChatBaseComponent");
+        Class<?> RemoteChatSession$Data = BukkitReflection.getClass("network.chat.RemoteChatSession$Data", "network.chat.RemoteChatSession$a");
         Class<Enum> EnumGamemodeClass = (Class<Enum>) BukkitReflection.getClass("world.level.GameType", "world.level.EnumGamemode");
         ActionClass = (Class<Enum>) BukkitReflection.getClass(
                 "network.protocol.game.ClientboundPlayerInfoUpdatePacket$Action", // Mojang
@@ -67,9 +69,10 @@ public class PacketTabList1193 extends PacketTabList18 {
 
         loadSharedContent(playerInfoDataClass, EnumGamemodeClass);
 
+        newPlayerInfoData = playerInfoDataClass.getConstructor(UUID.class, GameProfile.class, boolean.class, int.class, EnumGamemodeClass, IChatBaseComponent, RemoteChatSession$Data);
+
         PlayerInfoData_Listed = ReflectionUtils.getOnlyField(playerInfoDataClass, boolean.class);
         PlayerInfoData_GameMode = ReflectionUtils.getOnlyField(playerInfoDataClass, EnumGamemodeClass);
-        Class<?> RemoteChatSession$Data = BukkitReflection.getClass("network.chat.RemoteChatSession$Data", "network.chat.RemoteChatSession$a");
         PlayerInfoData_RemoteChatSession = ReflectionUtils.getOnlyField(playerInfoDataClass, RemoteChatSession$Data);
         PlayerInfoData_UUID = ReflectionUtils.getOnlyField(playerInfoDataClass, UUID.class);
         newRemovePacket = BukkitReflection.getClass("network.protocol.game.ClientboundPlayerInfoRemovePacket").getConstructor(List.class);
@@ -77,12 +80,12 @@ public class PacketTabList1193 extends PacketTabList18 {
         actionAddPlayer = Enum.valueOf(ActionClass, Action.ADD_PLAYER.name());
         actionUpdateDisplayName = Enum.valueOf(ActionClass, Action.UPDATE_DISPLAY_NAME.name());
         actionUpdateLatency = Enum.valueOf(ActionClass, Action.UPDATE_LATENCY.name());
-        Enum actionUpdateGameMode = Enum.valueOf(ActionClass, Action.UPDATE_GAME_MODE.name());
 
         actionToEnumSet.put(Action.ADD_PLAYER, EnumSet.allOf(ActionClass));
-        actionToEnumSet.put(Action.UPDATE_GAME_MODE, EnumSet.of(actionUpdateGameMode));
+        actionToEnumSet.put(Action.UPDATE_GAME_MODE, EnumSet.of(Enum.valueOf(ActionClass, Action.UPDATE_GAME_MODE.name())));
         actionToEnumSet.put(Action.UPDATE_DISPLAY_NAME, EnumSet.of(actionUpdateDisplayName));
         actionToEnumSet.put(Action.UPDATE_LATENCY, EnumSet.of(actionUpdateLatency));
+        actionToEnumSet.put(Action.UPDATE_LISTED, EnumSet.of(Enum.valueOf(ActionClass, Action.UPDATE_LISTED.name())));
     }
 
     @Override
@@ -91,16 +94,22 @@ public class PacketTabList1193 extends PacketTabList18 {
         packetSender.sendPacket(player.getPlayer(), newRemovePacket.newInstance(Collections.singletonList(entry)));
     }
 
+    @Override
+    public void updateListed(@NonNull UUID entry, boolean listed) {
+        packetSender.sendPacket(player.getPlayer(),
+                createPacket(Action.UPDATE_LISTED, entry, "", null, listed, 0, 0, null));
+    }
+
     @SneakyThrows
     @NonNull
     @Override
     public Object createPacket(@NonNull Action action, @NonNull UUID id, @NonNull String name, @Nullable Skin skin,
-                               int latency, int gameMode, @Nullable Object displayName) {
+                               boolean listed, int latency, int gameMode, @Nullable Object displayName) {
         Object packet = newPlayerInfo.newInstance(actionToEnumSet.get(action), Collections.emptyList());
         PLAYERS.set(packet, Collections.singletonList(newPlayerInfoData.newInstance(
                 id,
                 action == Action.ADD_PLAYER ? createProfile(id, name, skin) : null,
-                true,
+                listed,
                 latency,
                 gameModes[gameMode],
                 displayName,

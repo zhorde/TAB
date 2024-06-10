@@ -4,11 +4,9 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.SneakyThrows;
 import me.neznamy.tab.platforms.bukkit.nms.BukkitReflection;
-import me.neznamy.tab.shared.TAB;
-import me.neznamy.tab.shared.TabConstants;
 import me.neznamy.tab.shared.chat.EnumChatFormat;
-import me.neznamy.tab.shared.features.sorting.Sorting;
 import me.neznamy.tab.shared.platform.Scoreboard;
+import me.neznamy.tab.shared.platform.Scoreboard.TeamAction;
 import me.neznamy.tab.shared.platform.TabPlayer;
 import me.neznamy.tab.shared.util.BiConsumerWithException;
 import me.neznamy.tab.shared.util.ReflectionUtils;
@@ -17,8 +15,8 @@ import org.jetbrains.annotations.Nullable;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 
 /**
  * Class storing all team related fields and methods.
@@ -32,7 +30,6 @@ public class TeamPacketData {
     /** First version with static constructor-like methods */
     private final int STATIC_CONSTRUCTOR_VERSION = 17;
 
-    private Class<?> Component;
     private final Object emptyScoreboard;
     @Getter private final Class<?> TeamPacketClass;
     private Constructor<?> newTeamPacket;
@@ -74,7 +71,12 @@ public class TeamPacketData {
         emptyScoreboard = Scoreboard.getConstructor().newInstance();
         newScoreboardTeam = scoreboardTeam.getConstructor(Scoreboard, String.class);
         TeamPacket_NAME = ReflectionUtils.getFields(TeamPacketClass, String.class).get(0);
-        TeamPacket_ACTION = ReflectionUtils.getInstanceFields(TeamPacketClass, int.class).get(0);
+        List<Field> intFields = ReflectionUtils.getInstanceFields(TeamPacketClass, int.class);
+        if (minorVersion >= 8 && minorVersion <= 12) {
+            TeamPacket_ACTION = intFields.get(1);
+        } else {
+            TeamPacket_ACTION = intFields.get(0);
+        }
         TeamPacket_PLAYERS = ReflectionUtils.getOnlyField(TeamPacketClass, Collection.class);
         ScoreboardTeam_getPlayerNameSet = ReflectionUtils.getOnlyMethod(scoreboardTeam, Collection.class);
         chatFormats = (Enum<?>[]) enumChatFormatClass.getMethod("values").invoke(null);
@@ -88,12 +90,10 @@ public class TeamPacketData {
                 new String[]{"func_98300_b", "setCanSeeFriendlyInvisibles", "b", "m_83362_", "setSeeFriendlyInvisibles"}, // {Thermos, 1.5.1+, 1.5 & 1.18+, Mohist 1.18.2, 1.20.2+}
                 boolean.class
         );
-        if (minorVersion >= 7) {
-            Component = BukkitReflection.getClass("network.chat.Component", "network.chat.IChatBaseComponent", "IChatBaseComponent");
-        }
         if (minorVersion >= 8) loadVisibility(scoreboardTeam);
         if (minorVersion >= 9) loadCollision(scoreboardTeam);
         if (minorVersion >= MODERN_TEAM_DATA_VERSION) {
+            Class<?> Component = BukkitReflection.getClass("network.chat.Component", "network.chat.IChatBaseComponent", "IChatBaseComponent");
             ScoreboardTeam_setColor = ReflectionUtils.getOnlyMethod(scoreboardTeam, void.class, enumChatFormatClass);
             ScoreboardTeam_setPrefix = ReflectionUtils.getMethod(
                     scoreboardTeam,
@@ -186,7 +186,7 @@ public class TeamPacketData {
         if (BukkitReflection.getMinorVersion() >= STATIC_CONSTRUCTOR_VERSION) {
             return TeamPacketConstructor_ofBoolean.invoke(null, team, true);
         } else {
-            return newTeamPacket.newInstance(team, Scoreboard.TeamAction.CREATE);
+            return newTeamPacket.newInstance(team, TeamAction.CREATE);
         }
     }
 
@@ -202,7 +202,7 @@ public class TeamPacketData {
         if (BukkitReflection.getMinorVersion() >= STATIC_CONSTRUCTOR_VERSION) {
             return TeamPacketConstructor_of.invoke(null, team);
         } else {
-            return newTeamPacket.newInstance(team, Scoreboard.TeamAction.REMOVE);
+            return newTeamPacket.newInstance(team, TeamAction.REMOVE);
         }
     }
 
@@ -238,7 +238,7 @@ public class TeamPacketData {
         if (BukkitReflection.getMinorVersion() >= STATIC_CONSTRUCTOR_VERSION) {
             return TeamPacketConstructor_ofBoolean.invoke(null, team, false);
         } else {
-            return newTeamPacket.newInstance(team, Scoreboard.TeamAction.UPDATE);
+            return newTeamPacket.newInstance(team, TeamAction.UPDATE);
         }
     }
 
@@ -299,39 +299,17 @@ public class TeamPacketData {
      * Checks if packet is team packet and removes all real players from team
      * if sent by other plugins and anti-override is fully active on a player.
      *
+     * @param   player
+     *          Player who received the packet
      * @param   packet
      *          Received packet
      */
     @SneakyThrows
-    public void onPacketSend(@NonNull Object packet) {
+    public void onPacketSend(@NonNull TabPlayer player, @NonNull Object packet) {
         if (!TeamPacketClass.isInstance(packet)) return;
-        if (TAB.getInstance().getNameTagManager() == null) return;
         int action = TeamPacket_ACTION.getInt(packet);
-        if (action == 1 || action == 2 || action == 4) return;
-        Collection<String> players = (Collection<String>) TeamPacket_PLAYERS.get(packet);
-        String teamName = (String) TeamPacket_NAME.get(packet);
-        if (players == null) return;
-        //creating a new list to prevent NoSuchFieldException in minecraft packet encoder when a player is removed
-        Collection<String> newList = new ArrayList<>();
-        for (String entry : players) {
-            TabPlayer p = Scoreboard.getPlayer(entry);
-            if (p == null) {
-                newList.add(entry);
-                continue;
-            }
-            Sorting sorting = TAB.getInstance().getFeatureManager().getFeature(TabConstants.Feature.SORTING);
-            String expectedTeam = sorting.getShortTeamName(p);
-            if (expectedTeam == null) {
-                newList.add(entry);
-                continue;
-            }
-            if (!TAB.getInstance().getNameTagManager().getDisableChecker().isDisabledPlayer(p) &&
-                    !TAB.getInstance().getNameTagManager().hasTeamHandlingPaused(p) && !teamName.equals(expectedTeam)) {
-                Scoreboard.logTeamOverride(teamName, p.getName(), expectedTeam);
-            } else {
-                newList.add(entry);
-            }
-        }
-        TeamPacket_PLAYERS.set(packet, newList);
+        if (action == TeamAction.UPDATE) return;
+        TeamPacket_PLAYERS.set(packet, player.getScoreboard().onTeamPacket(
+                action, (String) TeamPacket_NAME.get(packet), (Collection<String>) TeamPacket_PLAYERS.get(packet)));
     }
 }

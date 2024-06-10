@@ -5,6 +5,7 @@ import com.mojang.authlib.properties.Property;
 import io.netty.channel.Channel;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
+import me.neznamy.tab.platforms.fabric.FabricScoreboard;
 import me.neznamy.tab.platforms.fabric.FabricTabList;
 import me.neznamy.tab.platforms.fabric.FabricTabPlayer;
 import me.neznamy.tab.shared.ProtocolVersion;
@@ -13,6 +14,7 @@ import me.neznamy.tab.shared.backend.EntityData;
 import me.neznamy.tab.shared.backend.Location;
 import me.neznamy.tab.shared.chat.ChatModifier;
 import me.neznamy.tab.shared.chat.TabComponent;
+import me.neznamy.tab.shared.platform.Scoreboard;
 import me.neznamy.tab.shared.platform.TabList;
 import me.neznamy.tab.shared.platform.TabPlayer;
 import me.neznamy.tab.shared.util.ReflectionUtils;
@@ -42,7 +44,6 @@ import net.minecraft.world.scores.criteria.ObjectiveCriteria.RenderType;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.util.*;
 
@@ -51,29 +52,13 @@ import java.util.*;
  */
 @SuppressWarnings({
         "unchecked", // Java generic types
-        "unused", // Actually used, just via reflection
-        "rawtypes" // raw enums
+        "unused" // Actually used, just via reflection
 })
 @RequiredArgsConstructor
 public class Loader_1_14_4 implements Loader {
 
     private final ProtocolVersion serverVersion;
     private ArmorStand dummyEntity;
-    private Class<Enum> tablistActionClass;
-
-    @SneakyThrows
-    private ClientboundPlayerInfoPacket createInfoPacket(@NotNull ProtocolVersion serverVersion, @NotNull TabList.Action action) {
-        if (tablistActionClass == null) {
-            if (serverVersion.getMinorVersion() >= 17) {
-                tablistActionClass = (Class<Enum>) Class.forName("net.minecraft.class_2703$class_5893");
-            } else {
-                tablistActionClass = (Class<Enum>) Class.forName("net.minecraft.class_2703$class_2704");
-            }
-        }
-        Class<?> classType = serverVersion.getMinorVersion() >= 17 ? Collection.class : Iterable.class;
-        return ClientboundPlayerInfoPacket.class.getConstructor(tablistActionClass, classType)
-                .newInstance(Enum.valueOf(tablistActionClass, action.name()), Collections.emptyList());
-    }
 
     @Override
     @NotNull
@@ -158,8 +143,16 @@ public class Loader_1_14_4 implements Loader {
     }
 
     @Override
-    public boolean isTeamPacket(@NotNull Packet<?> packet) {
-        return packet instanceof ClientboundSetPlayerTeamPacket;
+    @SneakyThrows
+    public void checkTeamPacket(@NotNull Packet<?> packet, @NotNull FabricScoreboard scoreboard) {
+        if (packet instanceof ClientboundSetPlayerTeamPacket) {
+            int action = ReflectionUtils.getInstanceFields(packet.getClass(), int.class).get(0).getInt(packet);
+            if (action == Scoreboard.TeamAction.UPDATE) return;
+            Field playersField = ReflectionUtils.getFields(packet.getClass(), Collection.class).get(0);
+            Collection<String> players = (Collection<String>) playersField.get(packet);
+            String teamName = String.valueOf(ReflectionUtils.getFields(packet.getClass(), String.class).get(0).get(packet));
+            playersField.set(packet, scoreboard.onTeamPacket(action, teamName, players));
+        }
     }
 
     @Override
@@ -198,7 +191,7 @@ public class Loader_1_14_4 implements Loader {
     @Override
     @SneakyThrows
     public void onPlayerInfo(@NotNull TabPlayer receiver, @NotNull Object packet) {
-        Enum action = (Enum) ReflectionUtils.getFields(packet.getClass(), tablistActionClass).get(0).get(packet);
+        ClientboundPlayerInfoPacket.Action action = (ClientboundPlayerInfoPacket.Action) ReflectionUtils.getFields(packet.getClass(), ClientboundPlayerInfoPacket.Action.class).get(0).get(packet);
         List<PlayerUpdate> players = (List<PlayerUpdate>) ReflectionUtils.getFields(packet.getClass(), List.class).get(0).get(packet);
         for (PlayerUpdate nmsData : players) {
             GameProfile profile = nmsData.getProfile();
@@ -221,28 +214,10 @@ public class Loader_1_14_4 implements Loader {
     @NotNull
     @SneakyThrows
     public Packet<?> buildTabListPacket(TabList.@NotNull Action action, @NotNull FabricTabList.Builder entry) {
-        ClientboundPlayerInfoPacket packet = createInfoPacket(serverVersion, action);
-        ReflectionUtils.getFields(ClientboundPlayerInfoPacket.class, List.class).get(0).set(packet, Collections.singletonList(createUpdate(serverVersion, entry)));
+        ClientboundPlayerInfoPacket packet = new ClientboundPlayerInfoPacket(ClientboundPlayerInfoPacket.Action.valueOf(action.name()));
+        ReflectionUtils.getFields(ClientboundPlayerInfoPacket.class, List.class).get(0).set(packet, Collections.singletonList(
+                packet.new PlayerUpdate(entry.createProfile(), entry.getLatency(), GameType.byId(entry.getGameMode()), entry.getDisplayName())));
         return packet;
-    }
-
-    @SneakyThrows
-    @SuppressWarnings("unchecked")
-    private PlayerUpdate createUpdate(@NotNull ProtocolVersion serverVersion, @NotNull FabricTabList.Builder entry) {
-        Constructor<PlayerUpdate> constructor = (Constructor<PlayerUpdate>) PlayerUpdate.class.getConstructors()[0];
-        if (serverVersion.getMinorVersion() >= 19) {
-            // 1.19 - 1.19.2
-            return constructor.newInstance(
-                    entry.createProfile(), entry.getLatency(), GameType.byId(entry.getGameMode()), entry.getDisplayName(), null);
-        } else if (serverVersion.getMinorVersion() >= 17) {
-            // 1.17 - 1.18.2
-            return constructor.newInstance(
-                    entry.createProfile(), entry.getLatency(), GameType.byId(entry.getGameMode()), entry.getDisplayName());
-        } else {
-            // 1.14 - 1.16.5
-            return constructor.newInstance(new ClientboundPlayerInfoPacket(null, Collections.emptyList()),
-                    entry.createProfile(), entry.getLatency(), GameType.byId(entry.getGameMode()), entry.getDisplayName());
-        }
     }
 
     @Override
@@ -318,7 +293,7 @@ public class Loader_1_14_4 implements Loader {
 
     @Override
     @SneakyThrows
-    public int[] getDestroyedEntities(Packet<?> destroyPacket) {
+    public int[] getDestroyedEntities(@NotNull Packet<?> destroyPacket) {
         return (int[]) ReflectionUtils.getOnlyField(destroyPacket.getClass()).get(destroyPacket);
     }
 

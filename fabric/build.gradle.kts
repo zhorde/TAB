@@ -12,11 +12,11 @@ repositories {
 
 dependencies {
     api(projects.shared)
-    minecraft("com.mojang:minecraft:24w11a")
+    minecraft("com.mojang:minecraft:24w19a")
     mappings(loom.officialMojangMappings())
     modImplementation("me.lucko:fabric-permissions-api:0.2-SNAPSHOT")
-    modImplementation("net.fabricmc:fabric-loader:0.14.17")
-    val version = "0.95.4+1.20.5"
+    modImplementation("net.fabricmc:fabric-loader:0.15.9")
+    val version = "0.97.8+1.20.6"
     modImplementation(fabricApi.module("fabric-api-base", version))
     modImplementation(fabricApi.module("fabric-lifecycle-events-v1", version))
     modImplementation(fabricApi.module("fabric-networking-api-v1", version))
@@ -26,7 +26,7 @@ dependencies {
 }
 
 loom {
-    accessWidenerPath.set(file("src/main/resources/tab.accesswidener"))
+    accessWidenerPath.set(file("src/main/resources/resources/tab.accesswidener"))
 }
 
 tasks {

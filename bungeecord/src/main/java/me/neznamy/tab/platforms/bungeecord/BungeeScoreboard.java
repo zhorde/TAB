@@ -4,16 +4,9 @@ import com.google.common.collect.Lists;
 import lombok.NonNull;
 import me.neznamy.tab.shared.ProtocolVersion;
 import me.neznamy.tab.shared.TAB;
-import me.neznamy.tab.shared.TabConstants;
 import me.neznamy.tab.shared.chat.EnumChatFormat;
 import me.neznamy.tab.shared.chat.TabComponent;
-import me.neznamy.tab.shared.features.nametags.NameTag;
-import me.neznamy.tab.shared.features.redis.RedisPlayer;
-import me.neznamy.tab.shared.features.redis.RedisSupport;
-import me.neznamy.tab.shared.features.redis.feature.RedisTeams;
-import me.neznamy.tab.shared.features.sorting.Sorting;
 import me.neznamy.tab.shared.platform.Scoreboard;
-import me.neznamy.tab.shared.platform.TabPlayer;
 import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.protocol.Either;
 import net.md_5.bungee.protocol.NumberFormat;
@@ -27,7 +20,7 @@ import java.util.Collection;
  * any Scoreboard API and the scoreboard class it has is just a
  * downstream tracker, we need to use packets.
  */
-public class BungeeScoreboard extends Scoreboard<BungeeTabPlayer> {
+public class BungeeScoreboard extends Scoreboard<BungeeTabPlayer, BaseComponent> {
 
     /** Version with a minor team recode */
     private final int TEAM_REWORK_VERSION = 13;
@@ -49,13 +42,13 @@ public class BungeeScoreboard extends Scoreboard<BungeeTabPlayer> {
 
     @Override
     public void registerObjective0(@NonNull String objectiveName, @NonNull String title, int display,
-                                   @Nullable TabComponent numberFormat) {
+                                   @Nullable BaseComponent numberFormat) {
         player.sendPacket(new ScoreboardObjective(
                 objectiveName,
                 either(title),
                 ScoreboardObjective.HealthDisplay.values()[display],
                 (byte) ObjectiveAction.REGISTER,
-                numberFormat == null ? null : new NumberFormat(NumberFormat.Type.FIXED, numberFormat.convert(player.getVersion()))
+                numberFormat == null ? null : new NumberFormat(NumberFormat.Type.FIXED, numberFormat)
         ));
     }
 
@@ -72,13 +65,13 @@ public class BungeeScoreboard extends Scoreboard<BungeeTabPlayer> {
 
     @Override
     public void updateObjective0(@NonNull String objectiveName, @NonNull String title, int display,
-                                 @Nullable TabComponent numberFormat) {
+                                 @Nullable BaseComponent numberFormat) {
         player.sendPacket(new ScoreboardObjective(
                 objectiveName,
                 either(title),
                 ScoreboardObjective.HealthDisplay.values()[display],
                 (byte) ObjectiveAction.UPDATE,
-                numberFormat == null ? null : new NumberFormat(NumberFormat.Type.FIXED, numberFormat.convert(player.getVersion()))
+                numberFormat == null ? null : new NumberFormat(NumberFormat.Type.FIXED, numberFormat)
         ));
     }
 
@@ -125,14 +118,14 @@ public class BungeeScoreboard extends Scoreboard<BungeeTabPlayer> {
 
     @Override
     public void setScore0(@NonNull String objective, @NonNull String scoreHolder, int score,
-                          @Nullable TabComponent displayName, @Nullable TabComponent numberFormat) {
+                          @Nullable BaseComponent displayName, @Nullable BaseComponent numberFormat) {
         player.sendPacket(new ScoreboardScore(
                 scoreHolder,
                 (byte) ScoreAction.CHANGE,
                 objective,
                 score,
-                displayName == null ? null : displayName.convert(player.getVersion()),
-                numberFormat == null ? null : new NumberFormat(NumberFormat.Type.FIXED, numberFormat.convert(player.getVersion()))
+                displayName,
+                numberFormat == null ? null : new NumberFormat(NumberFormat.Type.FIXED, numberFormat)
         ));
     }
 
@@ -165,36 +158,8 @@ public class BungeeScoreboard extends Scoreboard<BungeeTabPlayer> {
         }
         if (isAntiOverrideTeams() && packet instanceof Team) {
             Team team = (Team) packet;
-            if (team.getMode() == 1 || team.getMode() == 2 || team.getMode() == 4) return;
-            NameTag nameTag = TAB.getInstance().getNameTagManager();
-            if (nameTag == null) return;
-            Sorting sorting = TAB.getInstance().getFeatureManager().getFeature(TabConstants.Feature.SORTING);
-            Collection<String> col = Lists.newArrayList(team.getPlayers());
-            for (String entry : team.getPlayers()) {
-                TabPlayer player = getPlayer(entry);
-                if (player != null) {
-                    String expectedTeam = sorting.getShortTeamName(player);
-                    if (expectedTeam == null || nameTag.getDisableChecker().isDisabledPlayer(player) ||
-                            nameTag.hasTeamHandlingPaused(player)) continue;
-                    if (!team.getName().equals(expectedTeam)) {
-                        logTeamOverride(team.getName(), player.getName(), expectedTeam);
-                        col.remove(player.getNickname());
-                    }
-                }
-            }
-            RedisSupport redis = TAB.getInstance().getFeatureManager().getFeature(TabConstants.Feature.REDIS_BUNGEE);
-            if (redis != null) {
-                RedisTeams teams = redis.getRedisTeams();
-                if (teams != null) {
-                    for (RedisPlayer p : redis.getRedisPlayers().values()) {
-                        if (col.contains(p.getNickname()) && !team.getName().equals(teams.getTeamNames().get(p))) {
-                            logTeamOverride(team.getName(), p.getNickname(), teams.getTeamNames().get(p));
-                            col.remove(p.getNickname());
-                        }
-                    }
-                }
-            }
-            team.setPlayers(col.toArray(new String[0]));
+            if (team.getMode() == TeamAction.UPDATE) return;
+            team.setPlayers(onTeamPacket(team.getMode(), team.getName(), Lists.newArrayList(team.getPlayers())).toArray(new String[0]));
         }
     }
 }

@@ -1,6 +1,5 @@
 package me.neznamy.tab.platforms.fabric;
 
-import lombok.RequiredArgsConstructor;
 import me.neznamy.tab.shared.backend.EntityData;
 import me.neznamy.tab.shared.backend.Location;
 import me.neznamy.tab.shared.backend.entityview.EntityView;
@@ -17,7 +16,6 @@ import java.util.UUID;
 /**
  * EntityView implementation for Fabric using packets.
  */
-@RequiredArgsConstructor
 public class FabricEntityView implements EntityView {
 
     /** Player this view belongs to */
@@ -63,7 +61,7 @@ public class FabricEntityView implements EntityView {
 
     @Override
     public void destroyEntities(int... entities) {
-        FabricMultiVersion.destroyEntities(player.getPlayer(), entities);
+        player.sendPacket(new ClientboundRemoveEntitiesPacket(entities));
     }
 
     @Override

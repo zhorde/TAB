@@ -16,9 +16,11 @@ import java.util.stream.Collectors;
  * Scoreboard class for sending scoreboard-related packets.
  * @param   <T>
  *          Platform's TabPlayer class
+ * @param   <C>
+ *          Platform's component class
  */
 @RequiredArgsConstructor
-public abstract class Scoreboard<T extends TabPlayer> {
+public abstract class Scoreboard<T extends TabPlayer, C> {
 
     /** Static to prevent spam when packet is sent to each player */
     private static String lastTeamOverrideMessage;
@@ -31,6 +33,15 @@ public abstract class Scoreboard<T extends TabPlayer> {
 
     /** Scoreboard objectives player has registered */
     private final Set<String> registeredObjectives = new HashSet<>();
+
+    /** Player-to-Team map of expected teams of players */
+    private final Map<String, String> expectedTeams = new HashMap<>();
+
+    /** Map of blocked team adds, key is player and value is team name */
+    private final Map<String, String> blockedTeamAdds = new HashMap<>();
+
+    /** Map of allowed team adds, key is player and value is team name */
+    private final Map<String, String> allowedTeamAdds = new HashMap<>();
 
     /** Flag tracking time between Login packet send and its processing */
     private boolean frozen;
@@ -74,7 +85,13 @@ public abstract class Scoreboard<T extends TabPlayer> {
             error("Tried to update score (%s) without the existence of its requested objective '%s' to player ", scoreHolder, objective);
             return;
         }
-        setScore0(objective, scoreHolder, score, displayName, numberFormat);
+        setScore0(
+                objective,
+                scoreHolder,
+                score,
+                displayName == null ? null : displayName.convert(player.getVersion()),
+                numberFormat == null ? null : numberFormat.convert(player.getVersion())
+        );
     }
 
     /**
@@ -113,7 +130,12 @@ public abstract class Scoreboard<T extends TabPlayer> {
             error("Tried to register duplicated objective %s to player ", objectiveName);
             return;
         }
-        registerObjective0(objectiveName, cutTo(title, Limitations.SCOREBOARD_TITLE_PRE_1_13), display, numberFormat);
+        registerObjective0(
+                objectiveName,
+                cutTo(title, Limitations.SCOREBOARD_TITLE_PRE_1_13),
+                display,
+                numberFormat == null ? null : numberFormat.convert(player.getVersion())
+        );
     }
 
     /**
@@ -150,7 +172,12 @@ public abstract class Scoreboard<T extends TabPlayer> {
             error("Tried to modify non-existing objective %s for player ", objectiveName);
             return;
         }
-        updateObjective0(objectiveName, cutTo(title, Limitations.SCOREBOARD_TITLE_PRE_1_13), display, numberFormat);
+        updateObjective0(
+                objectiveName,
+                cutTo(title, Limitations.SCOREBOARD_TITLE_PRE_1_13),
+                display,
+                numberFormat == null ? null : numberFormat.convert(player.getVersion())
+        );
     }
 
     /**
@@ -183,6 +210,9 @@ public abstract class Scoreboard<T extends TabPlayer> {
             error("Tried to register duplicated team %s to player ", name);
             return;
         }
+        for (String player : players) {
+            expectedTeams.put(player, name);
+        }
         registerTeam0(
                 name,
                 cutTo(prefix, Limitations.TEAM_PREFIX_SUFFIX_PRE_1_13),
@@ -198,16 +228,22 @@ public abstract class Scoreboard<T extends TabPlayer> {
     /**
      * Unregisters team from the scoreboard.
      *
-     * @param   name
+     * @param   teamName
      *          Team name
      */
-    public final void unregisterTeam(@NonNull String name) {
+    public final void unregisterTeam(@NonNull String teamName) {
         if (frozen) return;
-        if (!registeredTeams.remove(name)) {
-            error("Tried to unregister non-existing team %s for player ", name);
+        if (!registeredTeams.remove(teamName)) {
+            error("Tried to unregister non-existing team %s for player ", teamName);
             return;
         }
-        unregisterTeam0(name);
+        for (Map.Entry<String, String> entry : expectedTeams.entrySet()) {
+            if (entry.getValue().equals(teamName)) {
+                expectedTeams.remove(entry.getKey());
+                break;
+            }
+        }
+        unregisterTeam0(teamName);
     }
 
     /**
@@ -328,19 +364,62 @@ public abstract class Scoreboard<T extends TabPlayer> {
     }
 
     /**
-     * Returns player by given nickname.
+     * Checks if team contains a player who should belong to a different team and if override attempt was detected,
+     * sends a warning and removes player from the collection.
      *
-     * @param   name
-     *          Nickname of player
-     * @return  Player from given nickname
+     * @param   action
+     *          Team packet action
+     * @param   teamName
+     *          Team name in the packet
+     * @param   players
+     *          Players in the packet
+     * @return  Modified collection of players
      */
-    @Nullable
-    public static TabPlayer getPlayer(@NonNull String name) {
-        for (TabPlayer p : TAB.getInstance().getOnlinePlayers()) {
-            if (p.getNickname().equals(name))
-                return p; // Nicked name
+    @NotNull
+    public Collection<String> onTeamPacket(int action, @NonNull String teamName, @NonNull Collection<String> players) {
+        Collection<String> newList = new ArrayList<>();
+        if (action == TeamAction.CREATE || action == TeamAction.ADD_PLAYER) {
+            for (String entry : players) {
+                String expectedTeam = expectedTeams.get(entry);
+                if (expectedTeam == null) {
+                    blockedTeamAdds.remove(entry);
+                    allowedTeamAdds.put(entry, teamName);
+                    newList.add(entry);
+                    continue;
+                }
+                if (teamName.equals(expectedTeam)) {
+                    newList.add(entry);
+                    allowedTeamAdds.remove(entry);
+                } else {
+                    blockedTeamAdds.put(entry, teamName);
+                    logTeamOverride(teamName, entry, expectedTeam);
+                }
+            }
+            return newList;
         }
-        return TAB.getInstance().getPlayer(name); // Try original name
+        if (action == TeamAction.REMOVE_PLAYER) {
+            // TAB does not send remove player, making checks easier
+            for (String entry : players) {
+                String expectedTeam = expectedTeams.get(entry);
+                if (expectedTeam != null) {
+                    allowedTeamAdds.remove(entry);
+                    blockedTeamAdds.remove(entry);
+                    continue;
+                }
+                if (allowedTeamAdds.containsKey(entry)) {
+                    allowedTeamAdds.remove(entry);
+                    newList.add(entry);
+                    continue;
+                }
+                blockedTeamAdds.remove(entry);
+            }
+            return newList;
+        }
+        if (action == TeamAction.REMOVE) {
+            allowedTeamAdds.entrySet().removeIf(entry -> entry.getValue().equals(teamName));
+            blockedTeamAdds.entrySet().removeIf(entry -> entry.getValue().equals(teamName));
+        }
+        return players;
     }
 
     /**
@@ -352,7 +431,7 @@ public abstract class Scoreboard<T extends TabPlayer> {
      * @param   player
      *          Player who was about to be added into the team
      * @param   expectedTeam
-     *          Expected name of the team
+     *          Expected team
      */
     public static void logTeamOverride(@NonNull String team, @NonNull String player, @NonNull String expectedTeam) {
         String message = "Blocked attempt to add player " + player + " into team " + team + " (expected team: " + expectedTeam + ")";
@@ -366,17 +445,17 @@ public abstract class Scoreboard<T extends TabPlayer> {
     protected abstract void setDisplaySlot0(int slot, @NonNull String objective);
 
     protected abstract void setScore0(@NonNull String objective, @NonNull String scoreHolder, int score,
-                                   @Nullable TabComponent displayName, @Nullable TabComponent numberFormat);
+                                   @Nullable C displayName, @Nullable C numberFormat);
 
     protected abstract void removeScore0(@NonNull String objective, @NonNull String scoreHolder);
 
     protected abstract void registerObjective0(@NonNull String objectiveName, @NonNull String title,
-                                            int display, @Nullable TabComponent numberFormat);
+                                            int display, @Nullable C numberFormat);
 
     protected abstract void unregisterObjective0(@NonNull String objectiveName);
 
     protected abstract void updateObjective0(@NonNull String objectiveName, @NonNull String title,
-                                          int display, @Nullable TabComponent numberFormat);
+                                          int display, @Nullable C numberFormat);
 
     protected abstract void registerTeam0(@NonNull String name, @NonNull String prefix, @NonNull String suffix,
                                           @NonNull NameVisibility visibility, @NonNull CollisionRule collision,

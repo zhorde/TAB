@@ -10,7 +10,6 @@ import me.neznamy.tab.shared.TAB;
 import me.neznamy.tab.shared.TabConstants;
 import me.neznamy.tab.shared.chat.TabComponent;
 import me.neznamy.tab.shared.hook.PremiumVanishHook;
-import me.neznamy.tab.shared.platform.Scoreboard;
 import me.neznamy.tab.shared.platform.TabList;
 import me.neznamy.tab.shared.platform.BossBar;
 import me.neznamy.tab.shared.proxy.ProxyTabPlayer;
@@ -32,7 +31,7 @@ public class BungeeTabPlayer extends ProxyTabPlayer {
 
     /** Player's scoreboard */
     @NotNull
-    private final Scoreboard<BungeeTabPlayer> scoreboard = new BungeeScoreboard(this);
+    private final BungeeScoreboard scoreboard = new BungeeScoreboard(this);
 
     /** Player's tab list based on version */
     @NotNull
@@ -57,7 +56,7 @@ public class BungeeTabPlayer extends ProxyTabPlayer {
      *          BungeeCord player
      */
     public BungeeTabPlayer(@NotNull BungeePlatform platform, @NotNull ProxiedPlayer p) {
-        super(platform, p, p.getUniqueId(), p.getName(), p.getServer() != null ? p.getServer().getInfo().getName() : "-", -1);
+        super(platform, p, p.getUniqueId(), p.getName(), p.getServer() != null ? p.getServer().getInfo().getName() : "-", p.getPendingConnection().getVersion());
     }
 
     @Override
@@ -111,19 +110,6 @@ public class BungeeTabPlayer extends ProxyTabPlayer {
                         " (online = " + getPlayer().isConnected() + ")", BungeeCordBug);
             }
         }
-    }
-
-    /**
-     * If ViaVersion is installed on BungeeCord, it changes protocol to match version
-     * of server to which player is connected to. For that reason, we need to retrieve
-     * the field more often than just on join.
-     *
-     * @return  Player's current protocol version
-     */
-    @Override
-    @NotNull
-    public ProtocolVersion getVersion() {
-        return ProtocolVersion.fromNetworkId(getPlayer().getPendingConnection().getVersion());
     }
 
     @Override

@@ -4,7 +4,6 @@ import lombok.NonNull;
 import lombok.SneakyThrows;
 import me.neznamy.tab.platforms.bungeecord.BungeeTabPlayer;
 import me.neznamy.tab.shared.TAB;
-import me.neznamy.tab.shared.chat.TabComponent;
 import me.neznamy.tab.shared.platform.TabList;
 import me.neznamy.tab.shared.util.ReflectionUtils;
 import net.md_5.bungee.UserConnection;
@@ -43,8 +42,8 @@ public abstract class BungeeTabList extends TabList<BungeeTabPlayer, BaseCompone
     }
 
     @Override
-    public void setPlayerListHeaderFooter(@NonNull TabComponent header, @NonNull TabComponent footer) {
-        player.sendPacket(new PlayerListHeaderFooter(toComponent(header), toComponent(footer)));
+    public void setPlayerListHeaderFooter0(@NonNull BaseComponent header, @NonNull BaseComponent footer) {
+        player.sendPacket(new PlayerListHeaderFooter(header, footer));
     }
 
     /**
@@ -70,6 +69,8 @@ public abstract class BungeeTabList extends TabList<BungeeTabPlayer, BaseCompone
      *          Entry name
      * @param   skin
      *          Entry skin
+     * @param   listed
+     *          Whether entry should be listed or not
      * @param   latency
      *          Entry latency
      * @param   gameMode
@@ -79,12 +80,12 @@ public abstract class BungeeTabList extends TabList<BungeeTabPlayer, BaseCompone
      * @return  Converted item from parameters
      */
     @NonNull
-    public Item entryToItem(@NonNull UUID id, @NonNull String name, @Nullable Skin skin, int latency, int gameMode, @Nullable BaseComponent displayName) {
+    public Item entryToItem(@NonNull UUID id, @NonNull String name, @Nullable Skin skin, boolean listed, int latency, int gameMode, @Nullable BaseComponent displayName) {
         Item item = item(id);
         item.setUsername(name);
         item.setDisplayName(displayName);
         item.setGamemode(gameMode);
-        item.setListed(true);
+        item.setListed(listed);
         item.setPing(latency);
         if (skin != null) {
             item.setProperties(new Property[]{new Property(TEXTURES_PROPERTY, skin.getValue(), skin.getSignature())});
@@ -150,10 +151,5 @@ public abstract class BungeeTabList extends TabList<BungeeTabPlayer, BaseCompone
     @Override
     public boolean containsEntry(@NonNull UUID entry) {
         return uuids.contains(entry);
-    }
-
-    @Override
-    public BaseComponent toComponent(@NonNull TabComponent component) {
-        return component.convert(player.getVersion());
     }
 }

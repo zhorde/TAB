@@ -2,7 +2,6 @@ package me.neznamy.tab.platforms.sponge8;
 
 import lombok.NonNull;
 import me.neznamy.tab.shared.TAB;
-import me.neznamy.tab.shared.chat.TabComponent;
 import me.neznamy.tab.shared.platform.TabList;
 import me.neznamy.tab.shared.platform.TabPlayer;
 import net.kyori.adventure.text.Component;
@@ -57,10 +56,16 @@ public class SpongeTabList extends TabList<SpongeTabPlayer, Component> {
     }
 
     @Override
-    public void addEntry0(@NonNull UUID id, @NonNull String name, @Nullable Skin skin, int latency, int gameMode, @Nullable Component displayName) {
+    public void updateListed(@NonNull UUID entry, boolean listed) {
+        // TODO
+    }
+
+    @Override
+    public void addEntry0(@NonNull UUID id, @NonNull String name, @Nullable Skin skin, boolean listed, int latency, int gameMode, @Nullable Component displayName) {
         GameProfile profile = GameProfile.of(id, name);
         if (skin != null) profile = profile.withProperty(ProfileProperty.of(
                 TEXTURES_PROPERTY, skin.getValue(), skin.getSignature()));
+        //TODO listed
         TabListEntry tabListEntry = TabListEntry.builder()
                 .list(player.getPlayer().tabList())
                 .profile(profile)
@@ -72,8 +77,8 @@ public class SpongeTabList extends TabList<SpongeTabPlayer, Component> {
     }
 
     @Override
-    public void setPlayerListHeaderFooter(@NonNull TabComponent header, @NonNull TabComponent footer) {
-        player.getPlayer().tabList().setHeaderAndFooter(toComponent(header), toComponent(footer));
+    public void setPlayerListHeaderFooter0(@NonNull Component header, @NonNull Component footer) {
+        player.getPlayer().tabList().setHeaderAndFooter(header, footer);
     }
 
     @Override
@@ -92,10 +97,5 @@ public class SpongeTabList extends TabList<SpongeTabPlayer, Component> {
                 }
             });
         }
-    }
-
-    @Override
-    public Component toComponent(@NonNull TabComponent component) {
-        return component.convert(player.getVersion());
     }
 }

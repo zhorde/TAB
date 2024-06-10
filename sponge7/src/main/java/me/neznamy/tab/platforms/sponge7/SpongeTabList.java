@@ -2,7 +2,6 @@ package me.neznamy.tab.platforms.sponge7;
 
 import lombok.NonNull;
 import me.neznamy.tab.shared.TAB;
-import me.neznamy.tab.shared.chat.TabComponent;
 import me.neznamy.tab.shared.platform.TabList;
 import me.neznamy.tab.shared.platform.TabPlayer;
 import org.jetbrains.annotations.NotNull;
@@ -57,7 +56,12 @@ public class SpongeTabList extends TabList<SpongeTabPlayer, Text> {
     }
 
     @Override
-    public void addEntry0(@NonNull UUID id, @NonNull String name, @Nullable Skin skin, int latency, int gameMode, @Nullable Text displayName) {
+    public void updateListed(@NonNull UUID entry, boolean listed) {
+        // Added in 1.19.3
+    }
+
+    @Override
+    public void addEntry0(@NonNull UUID id, @NonNull String name, @Nullable Skin skin, boolean listed, int latency, int gameMode, @Nullable Text displayName) {
         GameProfile profile = GameProfile.of(id, name);
         if (skin != null) profile.getPropertyMap().put(TEXTURES_PROPERTY, ProfileProperty.of(
                 TEXTURES_PROPERTY, skin.getValue(), skin.getSignature()));
@@ -72,8 +76,8 @@ public class SpongeTabList extends TabList<SpongeTabPlayer, Text> {
     }
 
     @Override
-    public void setPlayerListHeaderFooter(@NonNull TabComponent header, @NonNull TabComponent footer) {
-        player.getPlayer().getTabList().setHeaderAndFooter(toComponent(header), toComponent(footer));
+    public void setPlayerListHeaderFooter0(@NonNull Text header, @NonNull Text footer) {
+        player.getPlayer().getTabList().setHeaderAndFooter(header, footer);
     }
 
     @Override
@@ -92,10 +96,5 @@ public class SpongeTabList extends TabList<SpongeTabPlayer, Text> {
                 }
             });
         }
-    }
-
-    @Override
-    public Text toComponent(@NonNull TabComponent component) {
-        return Text.of(component.toLegacyText());
     }
 }

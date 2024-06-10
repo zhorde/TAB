@@ -3,18 +3,27 @@ package me.neznamy.tab.shared.platform;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
+import me.neznamy.tab.api.placeholder.PlayerPlaceholder;
 import me.neznamy.tab.shared.chat.SimpleComponent;
 import me.neznamy.tab.shared.chat.TabComponent;
 import me.neznamy.tab.shared.features.NickCompatibility;
+import me.neznamy.tab.shared.features.bossbar.BossBarManagerImpl;
+import me.neznamy.tab.shared.features.layout.LayoutManagerImpl;
+import me.neznamy.tab.shared.features.nametags.NameTag;
+import me.neznamy.tab.shared.features.nametags.unlimited.NameTagX;
+import me.neznamy.tab.shared.features.scoreboard.ScoreboardManagerImpl;
+import me.neznamy.tab.shared.features.sorting.Sorting;
 import me.neznamy.tab.shared.hook.FloodgateHook;
 import me.neznamy.tab.shared.*;
 import me.neznamy.tab.shared.features.types.Refreshable;
 import me.neznamy.tab.shared.event.impl.PlayerLoadEventImpl;
+import me.neznamy.tab.shared.placeholders.expansion.PlayerExpansionValues;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Abstract class storing common variables and functions for player,
@@ -72,6 +81,45 @@ public abstract class TabPlayer implements me.neznamy.tab.api.TabPlayer {
 
     /** Flag tracking whether the player is online or not */
     @Getter private boolean online = true;
+
+    /** Data for sorting */
+    public final Sorting.PlayerData sortingData = new Sorting.PlayerData();
+
+    /** Data for sidebar scoreboard feature */
+    public final ScoreboardManagerImpl.PlayerData scoreboardData = new ScoreboardManagerImpl.PlayerData();
+
+    /** Data for scoreboard team */
+    public final NameTag.PlayerData teamData = new NameTag.PlayerData();
+
+    /** Data for unlimited nametags */
+    public final NameTagX.PlayerData unlimitedNametagData = new NameTagX.PlayerData();
+
+    /** Data for Layout */
+    public final LayoutManagerImpl.PlayerData layoutData = new LayoutManagerImpl.PlayerData();
+
+    /** Data for BossBar */
+    public final BossBarManagerImpl.PlayerData bossbarData = new BossBarManagerImpl.PlayerData();
+
+    /** Data for plugin's PlaceholderAPI expansion */
+    public final PlayerExpansionValues expansionValues = new PlayerExpansionValues();
+
+    /** Whether player has disabled nametags or not */
+    public final AtomicBoolean disabledNametags = new AtomicBoolean();
+
+    /** Whether player has disabled unlimited nametags or not */
+    public final AtomicBoolean disabledUnlimitedNametags = new AtomicBoolean();
+
+    /** Whether player has disabled belowname or not */
+    public final AtomicBoolean disabledBelowname = new AtomicBoolean();
+
+    /** Whether player has disabled header/footer or not */
+    public final AtomicBoolean disabledHeaderFooter = new AtomicBoolean();
+
+    /** Whether player has disabled tablist formatting or not */
+    public final AtomicBoolean disabledPlayerList = new AtomicBoolean();
+
+    /** Whether player has disabled playerlist objective or not */
+    public final AtomicBoolean disabledYellowNumber = new AtomicBoolean();
 
     /**
      * Constructs new instance with given parameters
@@ -173,6 +221,7 @@ public abstract class TabPlayer implements me.neznamy.tab.api.TabPlayer {
     public void setGroup(@NotNull String permissionGroup) {
         if (this.permissionGroup.equals(permissionGroup)) return;
         this.permissionGroup = permissionGroup;
+        ((PlayerPlaceholder)TAB.getInstance().getPlaceholderManager().getPlaceholder(TabConstants.Placeholder.GROUP)).updateValue(this, permissionGroup);
         forceRefresh();
     }
 
@@ -180,6 +229,7 @@ public abstract class TabPlayer implements me.neznamy.tab.api.TabPlayer {
     public void setTemporaryGroup(@Nullable String group) {
         if (Objects.equals(group, temporaryGroup)) return;
         temporaryGroup = group;
+        ((PlayerPlaceholder)TAB.getInstance().getPlaceholderManager().getPlaceholder(TabConstants.Placeholder.GROUP)).updateValue(this, group);
         forceRefresh();
     }
 
@@ -300,7 +350,7 @@ public abstract class TabPlayer implements me.neznamy.tab.api.TabPlayer {
      *
      * @return  scoreboard interface for calling scoreboard-related methods
      */
-    public abstract @NotNull Scoreboard<? extends TabPlayer> getScoreboard();
+    public abstract @NotNull Scoreboard<? extends TabPlayer, ?> getScoreboard();
 
     /**
      * Returns handler for calling bossbar-related methods

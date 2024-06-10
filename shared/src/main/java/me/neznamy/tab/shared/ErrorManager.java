@@ -228,20 +228,6 @@ public class ErrorManager {
     }
 
     /**
-     * Prints error message when attempting to send plugin message to player
-     * who is not connected to any server.
-     *
-     * @param   player
-     *          Player message was attempted to be sent to
-     * @param   message
-     *          Message that failed to deliver
-     */
-    public void noServerPluginMessage(@NotNull TabPlayer player, byte[] message) {
-        printError("Skipped plugin message send to " + player.getName() + ", because player is not " +
-                "connected to any server (message=" + new String(message) + ")", Collections.emptyList(), false, errorLog);
-    }
-
-    /**
      * Prints error message when RedidSupport received message with unknown action.
      *
      * @param   action
@@ -290,18 +276,6 @@ public class ErrorManager {
     public void textureSkinDownloadError(@NotNull String texture, @NotNull Throwable t) {
         printError("Failed to download skin from texture \"" + texture + "\": " + t.getMessage(),
                 t, true, errorLog);
-    }
-
-    /**
-     * Prints warn if player is not in plugin's scoreboard.
-     *
-     * @param   player
-     *          Player who was in the wrong scoreboard
-     */
-    public void playerInWrongScoreboard(@NotNull TabPlayer player) {
-        printError("Player " + player.getName() + " was in a different scoreboard " +
-                "than expected. This means another plugin changed player's scoreboard.",
-                Collections.emptyList(), false, errorLog);
     }
 
     /**

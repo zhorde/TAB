@@ -46,6 +46,7 @@ public abstract class TabComponent {
      *          Platform's component class
      */
     @NotNull
+    @SuppressWarnings("unchecked")
     public <T> T convert(@NotNull ProtocolVersion clientVersion) {
         if (clientVersion.supportsRGB()) {
             if (convertedModern == null) convertedModern = TAB.getInstance().getPlatform().convertComponent(this, true);
@@ -212,8 +213,8 @@ public abstract class TabComponent {
      * @return  {@code true} if valid, {@code false} if not
      */
     private static boolean isHexCode(@NotNull String string) {
-        for (char c : string.toCharArray()) {
-            if ("0123456789AaBbCcDdEeFf".indexOf(c) == -1) return false;
+        for (int i=0; i<string.length(); i++) {
+            if ("0123456789AaBbCcDdEeFf".indexOf(string.charAt(i)) == -1) return false;
         }
         return true;
     }

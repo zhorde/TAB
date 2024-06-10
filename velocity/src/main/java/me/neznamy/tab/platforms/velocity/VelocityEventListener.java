@@ -1,12 +1,15 @@
 package me.neznamy.tab.platforms.velocity;
 
+import com.velocitypowered.api.event.PostOrder;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.command.CommandExecuteEvent;
 import com.velocitypowered.api.event.command.CommandExecuteEvent.CommandResult;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.connection.PluginMessageEvent;
 import com.velocitypowered.api.event.player.ServerPostConnectEvent;
+import com.velocitypowered.api.event.player.ServerPreConnectEvent;
 import com.velocitypowered.api.proxy.Player;
+import me.neznamy.tab.shared.ProtocolVersion;
 import me.neznamy.tab.shared.TabConstants;
 import me.neznamy.tab.shared.TAB;
 import me.neznamy.tab.shared.features.bossbar.BossBarManagerImpl;
@@ -33,6 +36,23 @@ public class VelocityEventListener implements EventListener<Player> {
     }
 
     /**
+     * Freezes Boss bar for 1.20.2+ players due to bug with adventure that causes disconnect
+     * on 1.20.5+ with "Network Protocol Error"
+     *
+     * @param   e
+     *          Event fired before player switches server for proper freezing
+     */
+    @Subscribe(order = PostOrder.LAST)
+    public void preConnect(@NotNull ServerPreConnectEvent e) {
+        if (e.getResult().isAllowed()) {
+            TabPlayer p = TAB.getInstance().getPlayer(e.getPlayer().getUniqueId());
+            if (p != null && p.getVersion().getNetworkId() >= ProtocolVersion.V1_20_2.getNetworkId()) {
+                p.getBossBar().freeze();
+            }
+        }
+    }
+
+    /**
      * Listens to player connecting to a backend server. This handles
      * both initial connections and server switch.
      *
@@ -48,6 +68,7 @@ public class VelocityEventListener implements EventListener<Player> {
             if (player == null) {
                 tab.getFeatureManager().onJoin(createPlayer(e.getPlayer()));
             } else {
+                player.getScoreboard().freeze(); // Prevent server switch listeners from sending packets before re-registering objectives in onLoginPacket
                 tab.getFeatureManager().onServerChange(
                         player.getUniqueId(),
                         e.getPlayer().getCurrentServer().map(s -> s.getServerInfo().getName()).orElse("null")

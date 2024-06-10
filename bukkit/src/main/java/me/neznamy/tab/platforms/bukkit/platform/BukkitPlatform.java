@@ -1,11 +1,9 @@
 package me.neznamy.tab.platforms.bukkit.platform;
 
 import lombok.Getter;
-import lombok.SneakyThrows;
 import me.clip.placeholderapi.PlaceholderAPI;
 import me.neznamy.tab.platforms.bukkit.*;
 import me.neznamy.tab.platforms.bukkit.entity.PacketEntityView;
-import me.neznamy.tab.platforms.bukkit.header.HeaderFooter;
 import me.neznamy.tab.platforms.bukkit.hook.BukkitPremiumVanishHook;
 import me.neznamy.tab.platforms.bukkit.nms.BukkitReflection;
 import me.neznamy.tab.platforms.bukkit.nms.ComponentConverter;
@@ -51,7 +49,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
-import java.lang.reflect.Field;
 
 /**
  * Implementation of Platform interface for Bukkit platform
@@ -70,13 +67,8 @@ public class BukkitPlatform implements BackendPlatform {
     /** Variables checking presence of other plugins to hook into */
     private final boolean placeholderAPI = ReflectionUtils.classExists("me.clip.placeholderapi.PlaceholderAPI");
 
-    /** NMS server to get TPS from on spigot */
-    @Nullable
-    private Object server;
-
-    /** TPS field */
-    @Nullable
-    private Field spigotTps;
+    /** Spigot field for tracking TPS, the array is final and only being modified instead of re-instantiated */
+    private double[] recentTps;
 
     /** Detection for presence of Paper's TPS getter */
     private final boolean paperTps = ReflectionUtils.methodExists(Bukkit.class, "getTPS");
@@ -94,8 +86,8 @@ public class BukkitPlatform implements BackendPlatform {
         this.plugin = plugin;
         long time = System.currentTimeMillis();
         try {
-            server = Bukkit.getServer().getClass().getMethod("getServer").invoke(Bukkit.getServer());
-            spigotTps = server.getClass().getField("recentTps");
+            Object server = Bukkit.getServer().getClass().getMethod("getServer").invoke(Bukkit.getServer());
+            recentTps = ((double[]) server.getClass().getField("recentTps").get(server));
         } catch (ReflectiveOperationException ignored) {
             //not spigot
         }
@@ -106,12 +98,9 @@ public class BukkitPlatform implements BackendPlatform {
         PacketEntityView.tryLoad();
         PingRetriever.tryLoad();
         TabListBase.findInstance();
-        if (BukkitReflection.getMinorVersion() >= 5) {
-            ScoreboardLoader.findInstance();
-        }
+        ScoreboardLoader.tryLoad();
         if (BukkitReflection.getMinorVersion() >= 8) {
             BukkitPipelineInjector.tryLoad();
-            HeaderFooter.findInstance();
         }
         BukkitUtils.sendCompatibilityMessage();
         Bukkit.getConsoleSender().sendMessage("[TAB] " + EnumChatFormat.GRAY + "Loaded NMS hook in " + (System.currentTimeMillis()-time) + "ms");
@@ -279,7 +268,11 @@ public class BukkitPlatform implements BackendPlatform {
 
     @Override
     public Object convertComponent(@NotNull TabComponent component, boolean modern) {
-        return ComponentConverter.INSTANCE.convert(component, modern);
+        if (ComponentConverter.INSTANCE != null) {
+            return ComponentConverter.INSTANCE.convert(component, modern);
+        } else {
+            return component;
+        }
     }
 
     @Override
@@ -298,12 +291,11 @@ public class BukkitPlatform implements BackendPlatform {
     }
 
     @Override
-    @SneakyThrows
     public double getTPS() {
-        if (paperTps) {
+        if (recentTps != null) {
+            return recentTps[0];
+        } else if (paperTps) {
             return Bukkit.getTPS()[0];
-        } else if (spigotTps != null) {
-            return ((double[]) spigotTps.get(server))[0];
         } else {
             return -1;
         }
@@ -313,18 +305,6 @@ public class BukkitPlatform implements BackendPlatform {
     public double getMSPT() {
         if (paperMspt) return Bukkit.getAverageTickTime();
         return -1;
-    }
-
-    /**
-     * Runs task in the main thread for given entity.
-     *
-     * @param   entity
-     *          Entity's main thread
-     * @param   task
-     *          Task to run
-     */
-    public void runSync(@NotNull Entity entity, @NotNull Runnable task) {
-        Bukkit.getScheduler().runTask(plugin, task);
     }
 
     /**
