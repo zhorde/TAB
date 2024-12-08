@@ -129,7 +129,7 @@ public class BukkitPlatform implements BackendPlatform {
             if (rspChat != null) {
                 Chat chat = rspChat.getProvider();
                 int refresh = TAB.getInstance().getConfiguration().getConfig().getPermissionRefreshInterval();
-                manager.registerPlayerPlaceholder("%vault-prefix%", refresh, p -> chat.getPlayerPrefix((Player) p.getPlayer()));
+                m manager.registerPlayerPlaceholder("%vault-prefix%", 1000, p -> LegacyComponentSerializer.builder().hexColors().useUnusualXRepeatedCharacterHexFormat().build().serialize(MiniMessage.miniMessage().deserialize(chat.getPlayerPrefix((Player) p.getPlayer()))));
                 manager.registerPlayerPlaceholder("%vault-suffix%", refresh, p -> chat.getPlayerSuffix((Player) p.getPlayer()));
             }
         }
